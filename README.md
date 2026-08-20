@@ -19,7 +19,7 @@ DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 
 ## 安装
 
-### 懒人版（需先推送到 GitHub）
+### 懒人版
 
 把你的 dsh 打开，对它说：
 
@@ -27,14 +27,13 @@ DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 安装一下这个皮肤包：https://github.com/AKI2253/Sidor_UI
 ```
 
-> 说明：这条命令依赖 dsh 助手能 `git clone` / 读取该 URL 并自动完成安装。
-> 本仓库自带 `sidor-install` 技能（`.agents/skills/`），dsh 在仓库目录内运行时自动发现，
-> 会先询问你确认、交代许可后再安装。
+> 说明：dsh 助手会 `git clone` / 读取该仓库并自动完成安装。仓库自带 `sidor-install`
+> 技能（`.agents/skills/`），会自动询问你确认、交代许可后再安装。
 
 ### 本地版（PowerShell，无需 GitHub）
 
 ```powershell
-cd <本仓库路径，如 E:\DeepSeek Harness\Sidor_UI>
+cd <Sidor_UI 仓库路径>
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1            # 安装
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Remove    # 卸载
 ```
@@ -42,8 +41,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Remove    # 卸�
 ### 命令版（需 pnpm）
 
 ```sh
-cd <harness>
-dsh plugin --profile web add <本仓库路径>/Sidor_UI
+cd <harness 目录>
+dsh plugin --profile web add <Sidor_UI 仓库路径>
 ```
 
 ### 全功能版（动态插件）
