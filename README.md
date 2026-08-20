@@ -20,11 +20,10 @@ DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 把你的 dsh 打开，对它说：
 
 ```
-安装一下这个皮肤包：<你的仓库 URL，如 https://github.com/<用户名>/sidor-ui>
+安装一下这个皮肤包：https://github.com/AKI2253/Sidor_UI
 ```
 
 > 说明：这条命令依赖 dsh 助手能 `git clone` / 读取该 URL 并自动完成安装。
-> **请先把本仓库推送到 GitHub**，再把上面的 `<你的仓库 URL>` 替换成真实地址。
 > 本仓库自带 `sidor-install` 技能（`.agents/skills/`），dsh 在仓库目录内运行时自动发现，
 > 会先询问你确认、交代许可后再安装。
 
