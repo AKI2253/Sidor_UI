@@ -28,6 +28,7 @@
     "lib/client.js",
     "cordis.patch.yml",
     "skin.json",
+    "preview",
     "docs/DEVELOPER.md",
     "AGENTS.md",
     ".agents",

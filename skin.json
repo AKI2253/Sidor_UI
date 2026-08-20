@@ -21,8 +21,9 @@
     "bundleWired": false
   },
   "preview": {
-    "light": null,
-    "dark": null
+    "hero": "preview/hero.png",
+    "setting": "preview/setting.png",
+    "warning": "preview/warning.png"
   },
   "order": 1
 }

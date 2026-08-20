@@ -5,7 +5,11 @@ DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 
 ## 效果预览
 
-> 截图待补充 —— 推送到 GitHub 后欢迎提交 `preview/` 亮/暗两套截图。
+点击图片可查看完整尺寸。
+
+| 主界面 | 设置页 | 余额不足警告 |
+|---|---|---|
+| [![主界面](preview/hero.png)](preview/hero.png) | [![设置页](preview/setting.png)](preview/setting.png) | [![余额不足](preview/warning.png)](preview/warning.png) |
 
 ## 住户
 
