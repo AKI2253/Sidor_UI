@@ -1,0 +1,28 @@
+{
+  "id": "sidor-ui",
+  "name": "SIDOR 星野控制台",
+  "nameEn": "SIDOR Starfield Console",
+  "author": "Sidor_UI contributors",
+  "tagline": "开屏粒子动画、常驻星野、余额徽章、设置页流光与低余额警告体系",
+  "description": "一套面向 DeepSeek Harness WebUI 的星野主题增强皮肤。以 ✦ 星辉开屏粒子动画开场（含 1/50 红色太阳风暴彩蛋），叠加常驻星野与呼吸辉光；侧边栏提供 DeepSeek 余额徽章与低余额四重红色警告（双缘流光/钱包红辉光/星野变红/session log 流光变红）；设置页新增余额分区并带星野背景与旋转流光边框。纯展示层 client 插件，不触达模型请求。",
+  "tags": [
+    "starfield",
+    "particles",
+    "navy",
+    "minimal",
+    "balance",
+    "skin"
+  ],
+  "accent": "#7aa2ff",
+  "bodyAttr": "data-dsh-sidor-ui",
+  "package": "sidor-ui",
+  "wiring": {
+    "id": "sidor-ui",
+    "bundleWired": false
+  },
+  "preview": {
+    "light": null,
+    "dark": null
+  },
+  "order": 1
+}

@@ -1,0 +1,14 @@
+Sidor_UI (SIDOR 星野控制台 · SIDOR Starfield Console)
+=====================================================
+
+Notice / 署名与使用说明 (MIT)
+
+- 本皮肤（Sidor_UI）由本项目作者以原创代码与程序化美术（canvas 粒子、SVG 星标）创作，
+  不包含第三方素材。星标 "✦" 与 SIDOR 品牌标识归本项目所有。
+- 界面配色与样式变量（--dsw-alias-*）来自 DeepSeek Harness 官方主题系统，仅作引用，
+  不构成对官方品牌或版权的使用。
+- 许可：MIT（见 LICENSE）。使用本皮肤时请保留本 NOTICE 与 LICENSE。
+
+英文: This skin is original code and programmatic art; the SIDOR brand mark belongs to
+this project. Interface tokens are referenced from the DeepSeek Harness theme system.
+Licensed under MIT — retain this NOTICE and LICENSE when redistributing.

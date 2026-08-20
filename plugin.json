@@ -1,0 +1,34 @@
+{
+  "name": "Sidor_UI",
+  "idPrefix": "sidf",
+  "pluginId": "sidf-4",
+  "description": "DeepSeek Harness 控制台皮肤：开屏动画 / 星野 / 余额徽章 / 设置页特效 / 低余额警告体系",
+  "runtime": "dynamic-cordis-plugin",
+  "restartBehavior": "manual (DSH 进程重启后需在 Cordis 面板重新运行)",
+  "version": {
+    "currentPackageId": "pkg-55",
+    "currentRun": "run-119"
+  },
+  "files": {
+    "client": "src/sidor-fx-client.js",
+    "host": "src/sidor-fx-host.js",
+    "docs": "docs/DEVELOPER.md"
+  },
+  "slots": [
+    { "name": "shell.overlay", "id": "sidor-fx", "order": 100 },
+    { "name": "settings.section", "id": "sidor-balance", "order": 25 },
+    { "name": "sidebar.footer.action", "id": "sidor-balance", "order": -10 },
+    { "name": "conversation.input.left", "id": "sidor-filepick", "order": 10 },
+    { "name": "conversation.composer.dock", "id": "sidor-cmp-resize", "order": 100 }
+  ],
+  "hostRpc": [
+    "sidor/balance-get",
+    "sidor/balance-set",
+    "sidor/balance-query",
+    "sidor/upload-doc"
+  ],
+  "ecosystem": {
+    "planned": true,
+    "note": "未来支持 Sidor 附属插件：settings.section / sidebar.footer.action 自动并排，复用 sidor/balance-* RPC 与 .sidor-balance.json 配置；开发规范见 docs/DEVELOPER.md"
+  }
+}

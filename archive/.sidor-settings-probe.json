@@ -1,0 +1,79 @@
+[
+  {
+    "i": 0,
+    "why": [],
+    "tag": "DIV",
+    "cls": "VOzbGW_overlay",
+    "attrs": {
+      "class": "VOzbGW_overlay",
+      "role": "presentation"
+    },
+    "rect": [
+      0,
+      0,
+      1699,
+      935
+    ],
+    "pos": "fixed",
+    "z": "1000",
+    "ov": "visible",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bd": "0px none rgb(249, 250, 251)",
+    "anc": [
+      "DIV.VOzbGW_overlay",
+      "DIV.",
+      "DIV.hHd-Xa_settingsArea",
+      "DIV.hHd-Xa_footArea",
+      "DIV.hHd-Xa_root",
+      "DIV.",
+      "DIV.pI_x6G_sidebarCol",
+      "DIV.pI_x6G_frame"
+    ],
+    "kids": [
+      {
+        "d": 1,
+        "tag": "DIV",
+        "cls": "VOzbGW_mask",
+        "data": "",
+        "text": "",
+        "rect": [
+          1699,
+          935
+        ]
+      },
+      {
+        "d": 1,
+        "tag": "DIV",
+        "cls": "VOzbGW_panel",
+        "data": "",
+        "text": "设置通用设置模型插件Agent 预设打开配置文件",
+        "rect": [
+          800,
+          800
+        ]
+      },
+      {
+        "d": 2,
+        "tag": "NAV",
+        "cls": "VOzbGW_nav",
+        "data": "",
+        "text": "设置通用设置模型插件Agent 预设",
+        "rect": [
+          188,
+          800
+        ]
+      },
+      {
+        "d": 2,
+        "tag": "DIV",
+        "cls": "VOzbGW_content",
+        "data": "",
+        "text": "打开配置文件关闭Agent 预设对此后新建的会话",
+        "rect": [
+          612,
+          800
+        ]
+      }
+    ]
+  }
+]

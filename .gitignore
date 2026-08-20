@@ -1,0 +1,28 @@
+# ===== Sidor_UI / DSH 运行产物（不要提交） =====
+
+# 运行数据与配置（含 API Key 明文，切勿入库）
+.sidor-balance.json
+.sidor-uploads/
+
+# 依赖 / 安装产物
+node_modules/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# 日志
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时与探测产物
+*.tmp
+*.probe.json
+
+# 构建输出说明：
+# lib/client.js 由 src 构建生成，但作为"推送即用"的发布产物保留提交。
+# 若希望仓库不含生成物，取消下一行注释（安装前先运行 scripts/build-client.ps1）：
+# lib/client.js

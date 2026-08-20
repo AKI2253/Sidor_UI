@@ -1,0 +1,7 @@
+# Sidor_UI 持久化插件 —— profile patch 片段
+# 用法：把本文件内容并入你的 profile（如 %USERPROFILE%\.dsh\profiles\web\cordis.patch.yml）。
+# 安装脚本 scripts/install.ps1 会自动完成；也可用官方命令：
+#   dsh plugin --profile web install <Sidor_UI 包路径>
+- insert:
+    - id: sidor-ui
+      name: sidor-ui

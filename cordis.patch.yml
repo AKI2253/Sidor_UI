@@ -1,0 +1,6 @@
+# Sidor_UI skin bundle patch: inserts its public dsh.client entry into the web plugin roster.
+# Install with `dsh plugin --profile <name> add <path-or-git-url>` (needs pnpm),
+# or run scripts/install.ps1 (writes the same row into the profile's cordis.patch.yml).
+- insert:
+    - id: sidor-ui
+      name: sidor-ui
