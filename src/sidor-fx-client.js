@@ -1176,10 +1176,8 @@ return {
         : '余额 未查询（设置中配置 API Key）'
       return React.createElement('button', {
         type: 'button',
-        className: 'sid-balance-badge' + (wide ? '' : ' rail') + (state.low ? ' low' : ''),
-        title,
+        className: 'sid-balance-badge sid-tip-host' + (wide ? '' : ' rail') + (state.low ? ' low' : ''),
         'aria-label': title,
-        'data-tip': wide ? undefined : (title),
       },
         React.createElement('span', { className: 'sid-balance-badge-ic', dangerouslySetInnerHTML: { __html: ICON_WALLET } }),
         wide
@@ -1187,6 +1185,7 @@ return {
               React.createElement(BalanceFormat, { balance: state.balance }),
             )
           : null,
+        React.createElement('span', { className: 'sid-tip' + (wide ? ' up' : ' right'), role: 'tooltip' }, title),
       )
     }
 
@@ -1390,11 +1389,11 @@ return {
 
       return React.createElement('div', {
         ref: dragRef,
-        className: 'sid-cmp-resize',
-        title: '向上拖动/滚轮放大，向下缩小（双击回到最小值）',
+        className: 'sid-cmp-resize sid-tip-host',
         onPointerDown,
         onDoubleClick,
       },
+        React.createElement('span', { className: 'sid-tip up', role: 'tooltip' }, '向上拖动/滚轮放大，向下缩小（双击回到最小值）'),
         React.createElement('span', { className: 'sid-cmp-resize-grip', 'aria-hidden': true }),
       )
     }
@@ -1694,11 +1693,10 @@ return {
         const d = ctx.timeout(() => { setToast(null) }, 2600)
         return () => d()
       }, [toast])
-      return React.createElement('div', { className: 'sid-filepick' },
+      return React.createElement('div', { className: 'sid-filepick sid-tip-host' },
         React.createElement('button', {
           type: 'button',
           className: 'sid-filepick-btn',
-          title: '附加文件/文件夹路径（agent 工具可直接读取）' + (SIDOR_STATIC ? '；静态模式不支持文件落盘' : ''),
           'aria-label': '选择文档',
           disabled: !usable || busy,
           onMouseDown: (e) => e.preventDefault(),
@@ -1708,6 +1706,9 @@ return {
           React.createElement('span', { className: 'sid-filepick-label' }, busy ? '上传中…' : '文档'),
           React.createElement('span', { className: 'sid-filepick-chevron', dangerouslySetInnerHTML: { __html: ICON_CHEVRON } }),
         ),
+        !open ? React.createElement('span', { className: 'sid-tip up', role: 'tooltip' },
+          '附加文件/文件夹路径（agent 工具可直接读取）' + (SIDOR_STATIC ? '；静态模式不支持文件落盘' : ''),
+        ) : null,
         React.createElement('input', {
           ref: inputRef,
           type: 'file',
@@ -1963,6 +1964,43 @@ return {
   from { opacity: 0; transform: translateX(-50%) translateY(6px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ---- 官方圆角悬浮提示框（对齐官方上下文面板 .JObwrW_panel 规范：
+       specific-menu 底 / border-inverted 描边 / shadow-lv3 / 12px 圆角 /
+       12px·20px 字号行高）---- */
+.sid-tip-host { position: relative; }
+.sid-tip {
+  position: absolute;
+  z-index: 120;
+  display: none;
+  width: max-content;   /* 按内容取宽（短文案一行、长文案受 max-width 封顶换行） */
+  max-width: 300px;
+  padding: 12px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-overlay, #16181e));
+  border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  border-radius: 12px;
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0, 0, 0, 0.35));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  pointer-events: none;
+  white-space: normal;   /* 长文案自动换行，避免文字溢出框体 */
+  text-align: left;
+}
+.sid-tip.up {
+  left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+}
+.sid-tip.right {
+  left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+}
+.sid-tip-host:hover > .sid-tip,
+.sid-tip-host:focus-visible > .sid-tip,
+.sid-tip-host:focus-within > .sid-tip {
+  display: block;
+}
+/* 余额徽章作为提示宿主时允许气泡溢出（原 overflow:hidden 仅用于裁圆角内文字） */
+.sid-balance-badge.sid-tip-host { overflow: visible; }
 
 /* ---- file picker: path picker panel（官方原生菜单风）----
    令牌对齐官方菜单面板：--dsw-specific-menu 底 / --dsw-alias-border-inverted
