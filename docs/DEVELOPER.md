@@ -56,6 +56,7 @@ SIDOR 余额页用 `25`（在 Agent 预设之后）。
 | 插槽 | 作用域 | id | order | 说明 |
 |------|--------|----|-------|------|
 | `shell.overlay` | root（list） | `sidor-fx` | 100 | 全屏覆盖层：开屏动画 → 常驻星野。`pointer-events:none`，仅 intro 期间捕获点击 |
+| `shell.overlay` | root（list） | `sidor-plugin-manage` | 200 | 插件管理（见 §12）：向官方"设置→插件列表"卡片注入 关闭/启用/卸载 按钮 + 红色流光二次确认 |
 | `settings.section` | root（list） | `sidor-balance` | 25 | 设置页新增一个左侧导航分区 |
 | `sidebar.footer.action` | root（list） | `sidor-balance` | -10 | 侧边栏底部动作（余额徽章）；`props.wide` 表示宽/窄轨态 |
 | `conversation.input.left` | session（list） | `sidor-filepick` | 10 | 输入框左侧工具（文档路径附加按钮）；props 含 `inputActions`/`sessionId`/`input` |
@@ -453,3 +454,46 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Remove    # 卸�
 > **打包前请过一遍 [PACKAGING.md](./PACKAGING.md) 的检查清单。**
 > 打包层的报错（`loaded without registering` / `cannot get property ... without inject`）
 > 一律不指向真正的原因，该文档记录了症状 → 根因的对照表。
+
+---
+
+## 12. 插件管理（设置 → 插件列表：关闭 / 启用 / 卸载）
+
+### 12.1 能力边界（架构事实）
+
+官方"设置 → 插件"列表（`dsh-client-ui-settings-plugin-inventory`）是**只读**的：
+`pluginInventory.list()` 只有读接口，客户端 `ctx.remote` 无任何插件管理接口，官方
+cordis 面板只管理动态插件。静态皮肤**没有写宿主文件的通道**（官方 `/api` 白名单
+无文件写入端点）。因此"改 `cordis.patch.yml` / 删包"必须由宿主侧执行——本功能
+采用**委托当前会话 agent 执行**：确认后经官方 `session.prompt` RPC 发送一条精确
+指令，agent 用其工具完成文件操作（越界写文件时 DSH 会弹授权）。操作需**重启 DSH**
+生效。
+
+### 12.2 补丁语法（agent 指令的依据）
+
+profile 补丁文件 `cordis.patch.yml` 是顶层 YAML 数组，每条补丁按顺序应用：
+
+- **插入插件**（install.ps1 写入）：`- insert: [- id: X, name: X]`
+- **关闭**：追加 `- id: X` + `disabled: true`（entry 不再运行）
+- **启用**：追加 `- id: X` + `disabled: false`（后者覆盖前者）
+- **卸载**：删除该插件的 `insert` 补丁块 + 删除 `node_modules/<包名>` 目录
+
+### 12.3 实现要点（`src/sidor-fx-client.js`）
+
+- 组件 `PluginManageFx` 注册进 `shell.overlay`（order 200），常驻但不渲染内容；
+- 每 600ms + MutationObserver 扫描官方插件卡片 `li[data-plugin-entry]`，注入
+  `.sid-plugin-actions`（关闭/启用/卸载按钮）；`data-plugin-entry`/`cardTitle[title]`/
+  `[data-enabled]` 分别给出 entry id、模块名、启用态；
+- 点击按钮弹出 `.sid-plugin-dialog`（官方菜单风）二次确认，确认键 `.sid-plugin-danger`
+  带**红色流光**（conic-gradient 旋转描边，复用 `sid-glow-flow`/`--sid-glow-angle`，
+  色值 `--dsw-alias-state-error-primary`）；
+- 确认后构造 `pluginManageInstruction()` 文本，经 `sidorHostRpc('session.prompt',
+  {sessionId, mode:'queue', content:[{type:'text', text}]})` 发送（sessionId 由
+  FilePickButton 渲染时捕获到模块级 `sidorActiveSessionId`）。
+
+### 12.4 红线提醒
+
+- 该功能会**发送一次模型请求**（agent 执行），属于对"纯展示层"约定的有意扩展
+  （用户显式要求）；文档与 README 均已标注。
+- 非 Sidor 系列插件（含 DSH 官方内置）同样会出现按钮，确认面板会追加红色警示，
+  请用户谨慎操作。

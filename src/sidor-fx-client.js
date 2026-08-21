@@ -54,6 +54,10 @@ async function sidorSessionWorkspacePath(sessionId) {
   return null
 }
 
+// 当前激活会话 id：由 FilePickButton（conversation.input.left 插槽 props 携带
+// sessionId）在每次渲染时刷新，供插件管理面板把操作指令发给当前会话的 agent。
+let sidorActiveSessionId = null
+
 return {
   inject: ['timer'],
   apply(ctx) {
@@ -1395,9 +1399,182 @@ return {
       )
     }
 
+    /* ============ plugin manager: official plugin list (关闭/启用/卸载) ============ */
+    // 官方"设置→插件列表"是只读的，皮肤在这里向每张插件卡片注入动作按钮。
+    // 确认（红色流光键）后，把精确的操作指令发给当前会话的 agent 执行——
+    // 静态皮肤没有写宿主文件的通道，改 cordis.patch.yml / 删包只能由 agent
+    // （或用户手动）完成。执行结果需重启 DSH 生效。
+    const PLUGIN_MANAGE_ACTIONS = {
+      disable: { label: '关闭', confirm: '确认关闭', title: '关闭插件', change: '在 profile 的 cordis.patch.yml 顶层数组末尾追加禁用条目（disabled: true），该插件下次启动不再加载' },
+      enable: { label: '启用', confirm: '确认启用', title: '启用插件', change: '在 profile 的 cordis.patch.yml 顶层数组末尾追加启用条目（disabled: false），覆盖旧的禁用状态' },
+      uninstall: { label: '卸载', confirm: '确认卸载', title: '卸载插件', change: '从 cordis.patch.yml 移除该插件的 insert 补丁块，并删除 profile node_modules 中的包目录' },
+    }
+    function pluginManageInstruction(p) {
+      const head = '【SIDOR 皮肤·插件管理】请执行一次 DSH 插件' + p.actionLabel + '操作（用户通过皮肤"设置→插件列表"界面确认发起的；仅执行一次，完成后简要汇报结果）：'
+      const target = [
+        '- 插件名称：' + p.name,
+        '- 补丁 entry id：' + p.id,
+        '- 模块名：' + p.moduleName,
+      ].join('\n')
+      const fileHint = '- 目标补丁文件：%USERPROFILE%\\.dsh\\profiles\\web\\cordis.patch.yml（若设置了 DSH_HOME 环境变量，则用 %DSH_HOME%\\profiles\\web\\cordis.patch.yml）'
+      let steps = ''
+      if (p.action === 'disable') {
+        steps = [
+          '操作：在该 YAML 文件的顶层数组末尾追加一条补丁：',
+          '  - id: ' + p.id,
+          '    disabled: true',
+          '要求：先读取文件确认顶层是数组；追加时保留原有条目与注释、UTF-8 编码保存；不要改动其它条目。',
+        ].join('\n')
+      } else if (p.action === 'enable') {
+        steps = [
+          '操作：在该 YAML 文件的顶层数组末尾追加一条补丁（覆盖旧的禁用状态）：',
+          '  - id: ' + p.id,
+          '    disabled: false',
+          '要求：先读取文件确认顶层是数组；追加时保留原有条目与注释、UTF-8 编码保存；不要改动其它条目。',
+        ].join('\n')
+      } else {
+        steps = [
+          '操作：',
+          '1) 从该 YAML 文件中删除 id 为 ' + p.id + ' 的整个 insert 补丁块（含其上方注释行）；',
+          '2) 删除 %USERPROFILE%\\.dsh\\profiles\\web\\node_modules\\' + p.moduleName + ' 目录（若该目录不存在，查找包名相近的目录并说明）。',
+          '要求：删除时保持文件其余内容与 UTF-8 编码不变。',
+        ].join('\n')
+      }
+      return head + '\n' + target + '\n' + fileHint + '\n' + steps + '\n\n完成后请向用户说明："已' + p.actionLabel + '插件 ' + p.name + '，重启 DSH 后生效"。'
+    }
+    function PluginManageFx() {
+      const [pending, setPending] = React.useState(null)
+      const [busy, setBusy] = React.useState(false)
+      const [toast, setToast] = React.useState(null)
+      const toastSeq = React.useRef(0)
+      const busyRef = React.useRef(false)
+      busyRef.current = busy
+      const show = (msg) => { setToast(msg); toastSeq.current += 1 }
+
+      // 向官方插件列表卡片注入「关闭/启用/卸载」按钮。卡片结构来自官方
+      // settings-plugin-inventory：li[data-plugin-entry] 内含可点击头部。
+      React.useEffect(() => {
+        const injectAll = () => {
+          const cards = document.querySelectorAll('li[data-plugin-entry]')
+          for (const card of Array.from(cards)) {
+            if (!(card instanceof HTMLElement)) continue
+            if (card.querySelector('.sid-plugin-actions')) continue
+            const entryId = (card.getAttribute('data-plugin-entry') || '').trim()
+            if (entryId === '') continue
+            const titleEl = card.querySelector('[class*="cardTitle"]')
+            const moduleName = titleEl instanceof HTMLElement ? String(titleEl.getAttribute('title') || '') : ''
+            const tagEl = card.querySelector('[data-enabled]')
+            const enabled = tagEl ? tagEl.getAttribute('data-enabled') === 'true' : true
+            const displayName = titleEl instanceof HTMLElement
+              ? String(titleEl.textContent || moduleName || entryId).trim()
+              : (moduleName || entryId)
+            const actions = document.createElement('div')
+            actions.className = 'sid-plugin-actions'
+            const mk = (action) => {
+              const btn = document.createElement('button')
+              btn.type = 'button'
+              btn.className = 'sid-plugin-act'
+              btn.textContent = action === 'enable' ? '启用' : (action === 'disable' ? '关闭' : '卸载')
+              btn.addEventListener('click', (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (busyRef.current) return
+                setPending({ id: entryId, name: displayName, moduleName: moduleName, action: action })
+              })
+              return btn
+            }
+            if (enabled) actions.appendChild(mk('disable'))
+            else actions.appendChild(mk('enable'))
+            actions.appendChild(mk('uninstall'))
+            card.appendChild(actions)
+          }
+        }
+        injectAll()
+        const iv = ctx.interval(injectAll, 600)
+        let mo = null
+        try {
+          mo = new MutationObserver(() => { injectAll() })
+          mo.observe(document.body, { childList: true, subtree: true })
+        } catch (e) { /* ignore */ }
+        return () => { iv(); if (mo) mo.disconnect() }
+      }, [])
+
+      React.useEffect(() => {
+        if (toast === null) return
+        const d = ctx.timeout(() => { setToast(null) }, 3600)
+        return () => d()
+      }, [toast])
+
+      const close = () => { if (!busy) setPending(null) }
+      const confirmAction = async () => {
+        const p = pending
+        if (!p || busy) return
+        setBusy(true)
+        setPending(null)
+        try {
+          const sessionId = sidorActiveSessionId
+          if (!sessionId) {
+            show('未检测到当前会话：请先打开一个工作区会话，再执行插件操作')
+            return
+          }
+          const text = pluginManageInstruction({
+            id: p.id,
+            name: p.name,
+            moduleName: p.moduleName,
+            action: p.action,
+            actionLabel: PLUGIN_MANAGE_ACTIONS[p.action].label,
+          })
+          await sidorHostRpc('session.prompt', {
+            sessionId: sessionId,
+            mode: 'queue',
+            content: [{ type: 'text', text: text }],
+          })
+          show('操作指令已发送给 agent 执行；完成后请重启 DSH 生效')
+        } catch (err) {
+          show('发送失败：' + (err && typeof err.message === 'string' ? err.message : String(err)))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const meta = pending ? PLUGIN_MANAGE_ACTIONS[pending.action] : null
+      const nonSidor = pending && pending.moduleName.indexOf('sidor') === -1
+      return React.createElement('div', { className: 'sid-plugin-manage' },
+        pending && meta ? React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'sid-plugin-backdrop', onClick: close }),
+          React.createElement('div', { className: 'sid-plugin-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': meta.title },
+            React.createElement('div', { className: 'sid-plugin-dialog-title' }, meta.title),
+            React.createElement('div', { className: 'sid-plugin-dialog-desc' },
+              React.createElement('span', null, '插件：'),
+              React.createElement('strong', null, pending.name),
+              React.createElement('code', null, pending.id),
+            ),
+            React.createElement('div', { className: 'sid-plugin-dialog-changes' },
+              React.createElement('div', { className: 'sid-plugin-dialog-change-item' }, '执行内容：' + meta.change),
+              React.createElement('div', { className: 'sid-plugin-dialog-change-item' }, '执行方式：指令将发送给当前会话的 agent，由 agent 修改 DSH 配置文件；需要权限时 DSH 会向您请求授权。'),
+              React.createElement('div', { className: 'sid-plugin-dialog-change-item' }, '生效时机：完成后需重启 DSH。'),
+            ),
+            nonSidor ? React.createElement('div', { className: 'sid-plugin-dialog-warn' },
+              '注意：该插件不是 Sidor 系列插件。若为 DSH 官方内置插件，' + meta.label + '可能导致界面或功能异常，请谨慎操作。',
+            ) : null,
+            React.createElement('div', { className: 'sid-plugin-dialog-row' },
+              React.createElement('button', { type: 'button', className: 'sid-plugin-act sid-plugin-cancel', disabled: busy, onClick: close }, '取消'),
+              React.createElement('button', { type: 'button', className: 'sid-plugin-danger', disabled: busy, onClick: confirmAction },
+                React.createElement('span', { className: 'sid-plugin-danger-glow', 'aria-hidden': 'true' }),
+                React.createElement('span', { className: 'sid-plugin-danger-label' }, busy ? '处理中…' : meta.confirm),
+              ),
+            ),
+          ),
+        ) : null,
+        toast !== null ? React.createElement('div', { className: 'sid-plugin-toast', role: 'status' }, toast) : null,
+      )
+    }
+
     /* ============ file picker (documents, next to the permission select) ============ */
     const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
     function FilePickButton(props) {
+      // 刷新当前激活会话 id（供插件管理面板委托 agent 执行操作）。
+      if (props.sessionId) sidorActiveSessionId = props.sessionId
       const inputRef = React.useRef(null)
       const [toast, setToast] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
@@ -1865,6 +2042,141 @@ return {
   font-family: inherit; color: var(--dsw-alias-label-secondary);
 }
 
+/* ---- plugin manager: official plugin list actions + red-flow confirm ---- */
+.sid-plugin-manage {
+  position: fixed; inset: 0; pointer-events: none; z-index: 200000;
+}
+/* 注入到官方插件卡片内的动作行（li[data-plugin-entry]） */
+.sid-plugin-actions {
+  display: flex; gap: 2px; align-items: center;
+  padding: 0 8px 8px; flex-wrap: wrap;
+}
+.sid-plugin-act {
+  height: 24px; padding: 0 8px;
+  border: none; border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sid-plugin-act:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.sid-plugin-act:disabled { opacity: 0.5; cursor: default; }
+/* 确认弹窗（官方菜单风） */
+.sid-plugin-backdrop {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+.sid-plugin-dialog {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(380px, calc(100vw - 40px)); z-index: 11;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-overlay, #16181e));
+  border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  border-radius: 12px;
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0, 0, 0, 0.35));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  pointer-events: auto;
+  animation: sid-panel-in 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.sid-plugin-dialog-title {
+  font-size: 14px; font-weight: 600; line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+.sid-plugin-dialog-desc {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.sid-plugin-dialog-desc strong { color: var(--dsw-alias-label-primary); }
+.sid-plugin-dialog-desc code {
+  font-family: var(--ds-font-family-code, monospace);
+  font-size: 11px; color: var(--dsw-alias-label-tertiary);
+}
+.sid-plugin-dialog-changes {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.2));
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1, transparent);
+}
+.sid-plugin-dialog-change-item { color: var(--dsw-alias-label-secondary); }
+.sid-plugin-dialog-warn {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 30%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 10%, transparent);
+  color: var(--dsw-alias-state-error-primary, #e5534b);
+}
+.sid-plugin-dialog-row {
+  display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+}
+.sid-plugin-cancel {
+  height: 30px; padding: 0 14px; border-radius: 8px; font-size: 13px;
+}
+/* 红色流光确认键：conic-gradient 旋转描边，复用 sid-glow-flow / --sid-glow-angle */
+.sid-plugin-danger {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 96px; height: 30px; padding: 0 14px;
+  border: none; border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary, #e5534b);
+  font-size: 13px; font-weight: 500; line-height: 20px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.sid-plugin-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 22%, transparent);
+}
+.sid-plugin-danger:disabled { opacity: 0.6; cursor: default; }
+.sid-plugin-danger-glow {
+  position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background:
+    conic-gradient(
+      from var(--sid-glow-angle, 0deg),
+      transparent 0deg,
+      transparent 240deg,
+      color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 35%, transparent) 285deg,
+      color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 95%, transparent) 330deg,
+      color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5534b) 35%, transparent) 375deg,
+      transparent 420deg,
+      transparent 360deg
+    );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+          mask-composite: exclude;
+  animation: sid-glow-flow 2.4s linear infinite;
+  pointer-events: none;
+}
+.sid-plugin-danger-label { position: relative; z-index: 1; }
+/* 插件管理 toast */
+.sid-plugin-toast {
+  position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(480px, calc(100vw - 40px));
+  padding: 8px 16px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-overlay, #16181e));
+  border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  border-radius: 10px;
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0, 0, 0, 0.35));
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px; line-height: 20px;
+  pointer-events: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: sid-panel-in 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 /* ---- settings panel: starfield background + soft border light ---- */
 .sid-settings-star {
   position: absolute !important;
@@ -2281,6 +2593,10 @@ return {
     slots.inject('shell.overlay', () => slots.register(
       { name: 'shell.overlay', id: 'sidor-fx', order: 100, label: 'SIDOR' },
       () => React.createElement(SidorFx),
+    ))
+    slots.inject('shell.overlay', () => slots.register(
+      { name: 'shell.overlay', id: 'sidor-plugin-manage', order: 200, label: '插件管理' },
+      () => React.createElement(PluginManageFx),
     ))
     slots.inject('conversation.input.left', () => slots.register(
       { name: 'conversation.input.left', id: 'sidor-filepick', order: 10, label: '文档' },

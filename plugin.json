@@ -16,6 +16,7 @@
   },
   "slots": [
     { "name": "shell.overlay", "id": "sidor-fx", "order": 100 },
+    { "name": "shell.overlay", "id": "sidor-plugin-manage", "order": 200 },
     { "name": "settings.section", "id": "sidor-balance", "order": 25 },
     { "name": "sidebar.footer.action", "id": "sidor-balance", "order": -10 },
     { "name": "conversation.input.left", "id": "sidor-filepick", "order": 10 },
