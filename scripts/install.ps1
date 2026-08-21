@@ -1,37 +1,43 @@
-# Sidor_UI 安装/卸载脚本（无 pnpm 环境的手工安装通道）
+﻿# Sidor 系列安装/卸载脚本（主皮肤共用；无 pnpm 环境的手工安装通道）
 # 安装：把本包复制进 DSH profile 的 node_modules，并把插件行写入该 profile 的 cordis.patch.yml，
-#       使 Sidor_UI 随 DSH 启动自动加载（持久化插件，重启无需手动）。
+#       使插件随 DSH 启动自动加载（持久化插件，重启无需手动）。
 # 用法：
-#   powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
-#   powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -ProfileName web -Remove
+#   powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1                          # 主皮肤 sidor-ui
+#   powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PkgName sidor-ui -Remove # 卸载
+# 说明：Sidor_box（独立附属插件）有自己的 scripts\install.ps1，与本脚本互不干扰。
 param(
   [string]$Root = (Split-Path -Parent $PSScriptRoot),
   [string]$DshHome = $env:DSH_HOME,
   [string]$ProfileName = 'web',
+  [string]$PkgName = 'sidor-ui',
+  [string]$SrcDir = '',
   [switch]$Remove
 )
 
 if (-not $DshHome) { $DshHome = Join-Path $env:USERPROFILE '.dsh' }
 $profileDir = Join-Path $DshHome "profiles\$ProfileName"
-$pkgName = 'sidor-ui'
-$target = Join-Path $profileDir "node_modules\$pkgName"
+$pkgRoot = if ($SrcDir) { Join-Path $Root $SrcDir } else { $Root }
+$target = Join-Path $profileDir "node_modules\$PkgName"
 $patchFile = Join-Path $profileDir 'cordis.patch.yml'
 
 $mode = 'install'; if ($Remove) { $mode = 'uninstall' }
-Write-Host "== Sidor_UI $mode =="
+Write-Host "== Sidor $PkgName $mode =="
 Write-Host "  profile : $profileDir"
 Write-Host "  package : $target"
 
 if (-not (Test-Path $profileDir)) { throw "profile not found: $profileDir" }
+if (-not (Test-Path $pkgRoot)) { throw "package source not found: $pkgRoot" }
 
 if ($Remove) {
   if (Test-Path $target) { Remove-Item $target -Recurse -Force; Write-Host "  removed package: $target" }
   if (Test-Path $patchFile) {
-    $c = Get-Content $patchFile -Raw
-    if ($c -match '(?m)^\s*-\s*insert:.*?name:\s*sidor-ui.*?$') {
-      # 简单移除：把整个 insert 块替换为空（仅当该块只含 sidor-ui 时；复杂 patch 请手工编辑）
-      $c = $c -replace '(?ms)^\s*-\s*insert:\s*\n\s*-\s*id:\s*sidor-ui\s*\n\s*name:\s*sidor-ui\s*\n?', ''
-      Set-Content $patchFile $c -Encoding UTF8
+    # 必须以 UTF-8 读取，否则 Windows PowerShell 5.1 会用 ANSI(GBK) 解码，
+    # 把文件中已有的中文注释读成乱码并回写（会破坏其他插件的补丁行）。
+    $c = Get-Content $patchFile -Raw -Encoding UTF8
+    $rxBlock = '(?ms)^\s*-\s*insert:\s*\n\s*-\s*id:\s*' + [regex]::Escape($PkgName) + '\s*\n\s*name:\s*' + [regex]::Escape($PkgName) + '\s*\n?'
+    if ($c -match $rxBlock) {
+      $c = $c -replace $rxBlock, ''
+      [System.IO.File]::WriteAllText($patchFile, $c, (New-Object System.Text.UTF8Encoding($true)))
       Write-Host '  removed patch entry (cordis.patch.yml)'
     }
   }
@@ -44,34 +50,42 @@ New-Item -ItemType Directory -Force -Path (Join-Path $profileDir 'node_modules')
 if (Test-Path $target) { Remove-Item $target -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 foreach ($rel in @('package.json', 'lib', 'cordis.patch.yml', 'skin.json')) {
-  $src = Join-Path $Root $rel
+  $src = Join-Path $pkgRoot $rel
   if (Test-Path $src) { Copy-Item $src $target -Recurse -Force }
 }
 Write-Host "  copied package -> $target"
 
-# 2) patch：把插件行并入 profile 的 cordis.patch.yml
-if (-not (Test-Path $patchFile)) { Set-Content $patchFile '[]' -Encoding UTF8 }
-$c = Get-Content $patchFile -Raw
+# 2) patch：把插件行并入 profile 的 cordis.patch.yml（可多插件共存，逐个追加）
+if (-not (Test-Path $patchFile)) {
+  [System.IO.File]::WriteAllText($patchFile, '[]', (New-Object System.Text.UTF8Encoding($true)))
+}
+$c = Get-Content $patchFile -Raw -Encoding UTF8
 $trimmed = $c.Trim()
-if ($c -match 'sidor-ui') {
-  Write-Host '  patch already contains sidor-ui; skipped.'
+$entryBlock = @"
+# Sidor $PkgName 持久化插件（由 scripts/install.ps1 写入；卸载请重跑 -Remove）
+- insert:
+    - id: $PkgName
+      name: $PkgName
+"@
+if ($c -match [regex]::Escape($PkgName)) {
+  Write-Host "  patch already contains $PkgName; skipped."
 } elseif ($trimmed -eq '[]' -or $trimmed.EndsWith('[]')) {
-  $new = @'
+  $new = @"
 # Your patch layer for this dsh profile, applied after every bundle layer:
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 
-# Sidor_UI 持久化插件（由 scripts/install.ps1 写入；卸载请重跑 -Remove）
-- insert:
-    - id: sidor-ui
-      name: sidor-ui
-'@
-  Set-Content $patchFile $new -Encoding UTF8
-  Write-Host '  wrote patch entry -> cordis.patch.yml'
+$entryBlock
+"@
+  [System.IO.File]::WriteAllText($patchFile, $new, (New-Object System.Text.UTF8Encoding($true)))
+  Write-Host "  wrote patch entry -> cordis.patch.yml"
 } else {
-  Write-Warning '  cordis.patch.yml 已有其他内容且不含 sidor-ui：请手动合并 patch\sidor-ui.patch.yml 片段。'
+  # 已有其他内容（可能是别的插件行）：在列表末尾追加一个新 insert 块
+  $appended = $c.TrimEnd() + "`n`n" + $entryBlock + "`n"
+  [System.IO.File]::WriteAllText($patchFile, $appended, (New-Object System.Text.UTF8Encoding($true)))
+  Write-Host "  appended patch entry -> cordis.patch.yml"
 }
 
 Write-Host ''
-Write-Host '  安装完成。重启 DSH（或热重载 profile）后 Sidor_UI 将随宿主自动加载。'
-Write-Host '  若浏览器未出现开屏动画，请硬刷新（Ctrl+Shift+R）。'
+Write-Host "  安装完成。重启 DSH（或热重载 profile）后 $PkgName 将随宿主自动加载。"
+Write-Host '  若浏览器未出现特效，请硬刷新（Ctrl+Shift+R）。'

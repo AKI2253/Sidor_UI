@@ -1,13 +1,24 @@
-﻿# Sidor_UI Client 构建脚本
-# 将 src/sidor-fx-client.js 内联进 scripts/client-wrapper.template.js，
-# 生成 lib/client.js（ModuleLoader bundle）。包内运行时无需构建，此脚本仅在源码更新后重打一次。
+﻿# Sidor 系列 Client 构建脚本（主皮肤与附属插件共用）
+# 把指定 src 内联进 scripts/client-wrapper.template.js，生成 ModuleLoader bundle。
+# 包内运行时无需构建，此脚本仅在源码更新后重打一次。
+#
+# 用法：
+#   powershell -ExecutionPolicy Bypass -File .\scripts\build-client.ps1                       # 主皮肤 sidor-ui
+#   powershell -ExecutionPolicy Bypass -File .\scripts\build-client.ps1 ^
+#     -PluginId sidor-toolbox ^
+#     -Src companions\sidor-toolbox\src\sidor-toolbox-client.js ^
+#     -Out companions\sidor-toolbox\lib\client.js
 param(
-  [string]$Root = (Split-Path -Parent $PSScriptRoot)
+  [string]$Root = (Split-Path -Parent $PSScriptRoot),
+  [string]$PluginId = 'sidor-ui',
+  [string]$Src = 'src\sidor-fx-client.js',
+  [string]$Tpl = 'scripts\client-wrapper.template.js',
+  [string]$Out = 'lib\client.js'
 )
 
-$srcPath = Join-Path $Root 'src\sidor-fx-client.js'
-$tplPath = Join-Path $Root 'scripts\client-wrapper.template.js'
-$outPath = Join-Path $Root 'lib\client.js'
+$srcPath = Join-Path $Root $Src
+$tplPath = Join-Path $Root $Tpl
+$outPath = Join-Path $Root $Out
 
 if (-not (Test-Path $srcPath)) { throw "src not found: $srcPath" }
 if (-not (Test-Path $tplPath)) { throw "template not found: $tplPath" }
@@ -17,6 +28,7 @@ $tpl = Get-Content $tplPath -Raw -Encoding UTF8
 
 # 源码是插件函数体（以 "return { ... }" 开头），模板将其作为 async 函数体内联。
 # 占位符必须精确替换；源码中不应出现该占位符。
+if (-not $tpl.Contains('__SIDOR_PLUGIN_ID__')) { throw 'template missing __SIDOR_PLUGIN_ID__ placeholder' }
 if (-not $tpl.Contains('__SIDOR_CLIENT_SRC__')) { throw 'template missing __SIDOR_CLIENT_SRC__ placeholder' }
 if (-not $tpl.Contains('__SIDOR_CLIENT_INJECT__')) { throw 'template missing __SIDOR_CLIENT_INJECT__ placeholder' }
 
@@ -26,12 +38,13 @@ if (-not $tpl.Contains('__SIDOR_CLIENT_INJECT__')) { throw 'template missing __S
 # 正则锚定行首缩进 + 冒号，不会误命中 `slots.inject('...')` 这类调用。
 $injectMatch = [regex]::Match($src, '(?m)^\s*inject\s*:\s*(\[[^\]]*\])')
 if (-not $injectMatch.Success) {
-  throw 'could not extract `inject: [...]` from src/sidor-fx-client.js — 若插件确实无依赖，请在源码中显式写 `inject: [],`'
+  throw ('could not extract `inject: [...]` from ' + $Src + ' — 若插件确实无依赖，请在源码中显式写 `inject: [],`')
 }
 $inject = $injectMatch.Groups[1].Value
-Write-Output "inject: $inject"
+Write-Output "plugin : $PluginId"
+Write-Output "inject : $inject"
 
-$out = $tpl.Replace('__SIDOR_CLIENT_INJECT__', $inject).Replace('__SIDOR_CLIENT_SRC__', $src)
+$out = $tpl.Replace('__SIDOR_PLUGIN_ID__', $PluginId).Replace('__SIDOR_CLIENT_INJECT__', $inject).Replace('__SIDOR_CLIENT_SRC__', $src)
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $outPath) | Out-Null
 [System.IO.File]::WriteAllText($outPath, $out, (New-Object System.Text.UTF8Encoding($false)))
@@ -47,7 +60,7 @@ if ($node) {
   }
   Write-Output "syntax check: ok"
 } else {
-  Write-Warning 'node not found — skipped syntax check on lib/client.js'
+  Write-Warning 'node not found — skipped syntax check'
 }
 
 Write-Output "built: $outPath ($((Get-Item $outPath).Length) bytes)"

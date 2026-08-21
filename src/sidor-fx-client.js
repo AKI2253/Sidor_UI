@@ -1,3 +1,59 @@
+/* ============ 运行形态与官方 /api RPC 通道 ============ */
+// 静态 wrapper 会在注入的 host 上盖 runtime:'static' 戳；动态 runner 的 host
+// 只有 call。据此区分两种形态：静态形态无法把文件落盘到工作区，文档附件降级为
+// 「路径选择」（agent 用工具直接读取路径）。
+const SIDOR_STATIC = !!(host && host.runtime === 'static')
+
+// 直连 DSH 宿主官方 /api RPC（同源 fetch，静态/动态形态通用）。
+// 注意：动态闭包会把裸 fetch 遮蔽成教学错误，必须走 window.fetch。
+// 信封格式与官方 WebApiClient 一致：
+//   POST /api/<method>，body = { type:'client-request', rpcId, method, payload }
+//   应答 = { type:'server-response', rpcId, result:{ ok, value | error } }
+async function sidorHostRpc(method, payload) {
+  const rpcId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+  const res = await window.fetch('/api/' + method, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: rpcId, method: method, payload: payload || {} }),
+  })
+  if (!res.ok) throw new Error('host ' + method + ' HTTP ' + res.status)
+  const json = await res.json()
+  if (!json || json.type !== 'server-response' || json.rpcId !== rpcId) {
+    throw new Error('host ' + method + ' 响应无效')
+  }
+  const result = json.result
+  if (!result || !result.ok) {
+    const err = result && result.error
+    const msg = err && typeof err.message === 'string' ? err.message : (err ? JSON.stringify(err) : '请求失败')
+    throw new Error(msg)
+  }
+  return result.value
+}
+
+// 解析当前会话所在工作区路径（路径输入框的提示/预填；尽力而为，失败返回 null）。
+async function sidorSessionWorkspacePath(sessionId) {
+  if (!sessionId) return null
+  try {
+    const ws = await sidorHostRpc('workspace.list', {})
+    const items = (ws && Array.isArray(ws.items)) ? ws.items : []
+    for (const w of items) {
+      if (w && Array.isArray(w.sessionIds) && w.sessionIds.indexOf(sessionId) !== -1 && typeof w.path === 'string') {
+        return w.path
+      }
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const s = await sidorHostRpc('session.list', {})
+    const items = (s && Array.isArray(s.items)) ? s.items : []
+    for (const it of items) {
+      if (it && it.sessionId === sessionId && typeof it.cwd === 'string' && it.cwd) return it.cwd
+    }
+  } catch (e) { /* ignore */ }
+  return null
+}
+
 return {
   inject: ['timer'],
   apply(ctx) {
@@ -1345,10 +1401,13 @@ return {
       const inputRef = React.useRef(null)
       const [toast, setToast] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
+      const [open, setOpen] = React.useState(false)
+      const [paths, setPaths] = React.useState('')
+      const [picking, setPicking] = React.useState(false)
+      const [wsPath, setWsPath] = React.useState(null)
       const toastSeq = React.useRef(0)
-      const openPicker = () => {
-        if (inputRef.current !== null) inputRef.current.click()
-      }
+      const wsResolved = React.useRef(false)
+      const usable = props.inputActions !== undefined
       const show = (msg) => { setToast(msg); toastSeq.current += 1 }
       const base64FromFile = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -1360,6 +1419,54 @@ return {
         reader.onerror = () => reject(new Error('读取文件失败'))
         reader.readAsDataURL(file)
       })
+      const openPicker = () => {
+        if (!usable || busy) return
+        setOpen(true)
+        // 打开时尽力解析当前工作区路径（提示/预填用），只解析一次。
+        if (!wsResolved.current) {
+          wsResolved.current = true
+          sidorSessionWorkspacePath(props.sessionId).then((p) => {
+            if (p) setWsPath(p)
+          }).catch(() => { /* ignore */ })
+        }
+      }
+      const closePicker = () => { setOpen(false); setPicking(false) }
+      const appendPaths = (text) => {
+        const line = String(text || '').trim()
+        if (line === '') return
+        setPaths((prev) => (prev.trim() === '' ? line : prev.replace(/\s+$/, '') + '\n' + line))
+      }
+      const pickFolder = async () => {
+        if (picking) return
+        setPicking(true)
+        try {
+          const value = await sidorHostRpc('host.pickDirectory', {})
+          const p = value && typeof value.path === 'string' ? value.path : null
+          if (p) appendPaths(p)
+          else show('已取消选择')
+        } catch (err) {
+          show('无法打开文件夹选择器：' + (err && typeof err.message === 'string' ? err.message : String(err)))
+        } finally {
+          setPicking(false)
+        }
+      }
+      const fillWorkspace = () => {
+        if (wsPath) appendPaths(wsPath)
+        else show('未能解析当前工作区路径，请在输入框手动填写')
+      }
+      const attachPaths = () => {
+        const lines = String(paths || '')
+          .split('\n')
+          .map((s) => s.trim().replace(/^["']+|["']+$/g, ''))
+          .filter((s) => s !== '')
+        if (lines.length === 0) { show('请先输入或选择路径'); return }
+        const cur = (props.input && props.input.draft) || ''
+        const next = cur.trim() === '' ? lines.join('\n') : cur + '\n' + lines.join('\n')
+        props.inputActions.setDraft(next)
+        setPaths('')
+        setOpen(false)
+        show('已附加 ' + lines.length + ' 个路径，agent 可直接读取')
+      }
       const onPick = async (e) => {
         const files = Array.from(e.target.files || [])
         e.target.value = ''
@@ -1380,6 +1487,9 @@ return {
               } catch (err) {
                 show(err && typeof err.message === 'string' ? err.message : String(err))
               }
+            } else if (SIDOR_STATIC) {
+              // 静态形态无法把文件落盘到工作区：引导走路径选择（agent 用工具直接读路径）。
+              show('静态模式无法写入工作区文件：请用上方路径选择附加文档（或直接输入路径）')
             } else {
               const dataBase64 = await base64FromFile(file)
               const result = await host.call('sidor/upload-doc', {
@@ -1411,9 +1521,9 @@ return {
         React.createElement('button', {
           type: 'button',
           className: 'sid-filepick-btn',
-          title: '选择文档',
+          title: '附加文件/文件夹路径（agent 工具可直接读取）' + (SIDOR_STATIC ? '；静态模式不支持文件落盘' : ''),
           'aria-label': '选择文档',
-          disabled: props.inputActions === undefined || busy,
+          disabled: !usable || busy,
           onMouseDown: (e) => e.preventDefault(),
           onClick: openPicker,
         },
@@ -1428,6 +1538,53 @@ return {
           style: { display: 'none' },
           onChange: onPick,
         }),
+        open ? React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'sid-filepick-backdrop', onClick: closePicker }),
+          React.createElement('div', { className: 'sid-filepick-panel', role: 'dialog', 'aria-label': '附加文档路径' },
+            React.createElement('textarea', {
+              className: 'sid-filepick-paths',
+              placeholder: '输入文件/文件夹路径，每行一个…\n例如 C:\\work\\notes.md 或 C:\\work\\assets',
+              value: paths,
+              spellCheck: false,
+              onChange: (e) => setPaths(e.target.value),
+              onKeyDown: (e) => { if (e.key === 'Escape') closePicker() },
+            }),
+            React.createElement('div', { className: 'sid-filepick-row' },
+              React.createElement('button', {
+                type: 'button',
+                className: 'sid-filepick-act',
+                disabled: picking,
+                onClick: pickFolder,
+              }, picking ? '选择中…' : '选择文件夹…'),
+              React.createElement('button', {
+                type: 'button',
+                className: 'sid-filepick-act',
+                onClick: fillWorkspace,
+              }, '填入工作区路径'),
+            ),
+            React.createElement('div', { className: 'sid-filepick-hint' },
+              wsPath
+                ? React.createElement(React.Fragment, null,
+                    '当前工作区：', React.createElement('code', null, wsPath),
+                  )
+                : '文件夹可用原生选择器；文件请直接填写绝对路径（浏览器无法读取文件的绝对路径）。',
+            ),
+            React.createElement('div', { className: 'sid-filepick-row' },
+              React.createElement('button', {
+                type: 'button',
+                className: 'sid-filepick-act sid-filepick-primary',
+                disabled: picking || paths.trim() === '',
+                onClick: attachPaths,
+              }, '附加到输入框'),
+              React.createElement('button', {
+                type: 'button',
+                className: 'sid-filepick-act',
+                disabled: busy,
+                onClick: () => { if (inputRef.current !== null) inputRef.current.click() },
+              }, '选择本地文件…'),
+            ),
+          ),
+        ) : null,
         toast !== null ? React.createElement('div', { className: 'sid-filepick-toast', role: 'status' }, toast) : null,
       )
     }
@@ -1618,7 +1775,7 @@ return {
 .sid-filepick-chevron { color: var(--dsw-alias-label-caption); flex: none; display: inline-flex; transition: transform 0.12s; }
 .sid-filepick-toast {
   position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
-  z-index: 6; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2);
+  z-index: 110; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px; background: var(--dsw-alias-bg-overlay);
   font-size: 12px; letter-spacing: 0.02em; color: var(--dsw-alias-label-primary);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
@@ -1628,6 +1785,84 @@ return {
 @keyframes sid-toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(6px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ---- file picker: path picker panel（官方原生菜单风）----
+   令牌对齐官方菜单面板：--dsw-specific-menu 底 / --dsw-alias-border-inverted
+   描边 / --dsw-shadow-lv3 阴影 / 12px 字号 20px 行高；打开方向与官方同排
+   权限选择器一致（向上弹出）。入场动画用专用关键帧（勿复用 toast 的
+   translateX(-50%)，那会把面板整体左移半个宽度）。 */
+.sid-filepick-backdrop {
+  position: fixed; inset: 0; z-index: 90;
+}
+.sid-filepick-panel {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  width: min(340px, calc(100vw - 48px));
+  z-index: 100;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-overlay, #16181e));
+  border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  border-radius: 12px;
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0, 0, 0, 0.35));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  animation: sid-panel-in 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@keyframes sid-panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sid-filepick-paths {
+  width: 100%; min-height: 58px; resize: vertical;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  background: var(--dsw-alias-input-bg, var(--dsw-alias-bg-base));
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35));
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px; line-height: 20px;
+  font-family: inherit;
+  outline: none;
+}
+.sid-filepick-paths:focus {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
+}
+.sid-filepick-row { display: flex; align-items: stretch; gap: 6px; }
+.sid-filepick-act {
+  flex: 1 1 0; min-width: 0; height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sid-filepick-act:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.sid-filepick-act:disabled { opacity: 0.55; cursor: default; }
+.sid-filepick-act.sid-filepick-primary {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-brand-primary);
+  font-weight: 500;
+}
+.sid-filepick-act.sid-filepick-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent);
+  color: var(--dsw-alias-brand-primary);
+}
+.sid-filepick-hint {
+  font-size: 11px; line-height: 16px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-caption));
+  word-break: break-all;
+}
+.sid-filepick-hint code {
+  font-family: inherit; color: var(--dsw-alias-label-secondary);
 }
 
 /* ---- settings panel: starfield background + soft border light ---- */

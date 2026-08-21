@@ -3,7 +3,7 @@
 // 复用动态插件执行机制：把 src/sidor-fx-client.js 的函数体放进闭包求值，
 // 并提供 React / styles / host（静态降级）闭包变量——与动态 runner 完全一致。
 window.__ModuleLoader__.load({
-	id: "sidor-ui",
+	id: "__SIDOR_PLUGIN_ID__",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
 			insert: function (css) {
 				if (typeof css !== "string") throw new Error("styles.insert(css) needs a CSS string");
 				var tag = document.createElement("style");
-				tag.dataset.plugin = "sidor-ui";
+				tag.dataset.plugin = "__SIDOR_PLUGIN_ID__";
 				tag.textContent = css;
 				document.head.append(tag);
 				__styleTags.add(tag);
@@ -32,8 +32,12 @@ window.__ModuleLoader__.load({
 
 		// host：静态形态的降级实现。
 		//   sidor/balance-* → localStorage 配置 + 浏览器 fetch 直连 DeepSeek 官方余额接口
-		//   sidor/upload-doc  → 静态模式不支持文件落盘（提示改用动态插件模式）
+		//   sidor/upload-doc  → 静态模式不支持文件落盘（客户端已不再调用：文档改走路径选择，
+		//                       经同源 /api RPC 直连官方 host.pickDirectory / workspace.list 等）
+		// runtime:'static' 是静态形态的戳：动态 runner 注入的 host 只有 call，没有该属性，
+		// 客户端据此区分静态/动态形态（SIDOR_STATIC）。
 		var host = {
+			runtime: "static",
 			call: async function (method, args) {
 				args = args == null ? {} : args;
 				var readCfg = function () {
@@ -124,7 +128,7 @@ __SIDOR_CLIENT_SRC__
 		exports.apply = async function (ctx) {
 			var plugin = await __makePlugin(React, console, styles, host, harness, undefined, undefined);
 			if (plugin == null || typeof plugin.apply !== "function") {
-				throw new Error("sidor-ui client half must return a plugin object with apply(ctx)");
+				throw new Error("__SIDOR_PLUGIN_ID__ client half must return a plugin object with apply(ctx)");
 			}
 			// timer：静态环境若无官方 timer 服务，用浏览器定时器 polyfill 兜底。
 			// 注意 Cordis 的 ctx 是 Proxy——未注入的服务在「属性访问」时就抛错，

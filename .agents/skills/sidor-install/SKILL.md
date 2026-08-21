@@ -62,7 +62,8 @@ description: 从 Sidor_UI 仓库安装或切换 SIDOR 皮肤：定位并同步�
 - SIDOR 是叠加式 client 插件（不是互斥皮肤开关），通过官方 Slot 注册
   （`shell.overlay` / `settings.section` / `sidebar.footer.action` 等）。
 - 静态形态无 host RPC 通道：余额配置走 localStorage、余额查询走浏览器 fetch
-  （CORS 被拒时 UI 显示错误）、文件上传不可用（提示改用动态形态）。
+  （CORS 被拒时 UI 显示错误）、文档上传不支持落盘——「文档」按钮降级为路径选择
+  （原生文件夹选择器 / 手动填路径，贴入输入框由 agent 工具读取）。
 - 源码唯一真源是 `src/sidor-fx-client.js`；`lib/client.js` 由
   `scripts/build-client.ps1` 从 src 生成（ModuleLoader bundle）。
 - 反馈问题走仓库 issue。

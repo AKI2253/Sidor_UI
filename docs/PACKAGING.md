@@ -211,6 +211,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 - [ ] `grep -n "__ModuleLoader__.load" lib/client.js` 命中，且 `id` 与 `package.json` 的
       `name` 一致（均为 `sidor-ui`）
 - [ ] `grep -n "exports.inject" lib/client.js` 的值 == 源码 `inject:` 声明
+- [ ] `grep -n 'runtime: "static"' lib/client.js` 命中（wrapper 在静态 host 上盖的形态戳，
+      客户端据此区分静态/动态；改了 `client-wrapper.template.js` 必须重打）
 - [ ] 源码无顶层 `import` / `export`
 - [ ] 已安装副本与 `lib/client.js` **字节数一致**
 - [ ] 重启 DSH + 硬刷新

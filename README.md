@@ -15,7 +15,7 @@ DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 
 | 皮肤 | 包名 | 说明 | 许可 |
 |---|---|---|---|
-| [sidor-ui](.) | `sidor-ui` | 星野主题：✦ 开屏粒子动画（1/50 红色太阳风暴彩蛋）、常驻星野、SIDOR 品牌徽记、余额徽章、设置页流光特效、低余额四重红色警告 | MIT |
+| [sidor-ui](.) | `sidor-ui` | 星野主题：✦ 开屏粒子动画（1/50 红色太阳风暴彩蛋）、常驻星野、SIDOR 品牌徽记、余额徽章、设置页流光特效、低余额四重红色警告、输入框文档路径附加（agent 工具直接读取） | MIT |
 
 ## 安装
 
@@ -51,6 +51,11 @@ dsh plugin --profile web add <Sidor_UI 仓库路径>
 Cordis 面板重新运行：Client 代码用 `src/sidor-fx-client.js`，Host 代码用
 `src/sidor-fx-host.js`。
 
+> **「文档」按钮两种形态都可用**：点击后选择/输入文件或文件夹路径，贴入输入框，
+> 由 agent 工具直接读取。静态插件（本地版/命令版）无法把文件落盘到工作区，
+> 故路径选择是主要方式（文件夹可用原生选择器，文件请填绝对路径）；
+> 动态插件额外保留"上传到工作区 `.sidor-uploads/`"（文件落盘后贴相对路径）。
+
 ## 许可
 
 本仓库整体以 MIT 发布。SIDOR 品牌标识归本项目所有。署名与使用边界见各皮肤
@@ -59,5 +64,11 @@ Cordis 面板重新运行：Client 代码用 `src/sidor-fx-client.js`，Host 代
 ## 未来规划：Sidor 附属插件生态
 
 Sidor_UI 按可扩展平台设计：官方插槽（Slot）的 list 型插槽天然支持多插件共存，
-未来**附属插件**可无冲突接入设置页（`settings.section`）、侧边栏（`sidebar.footer.action`），
+附属插件可无冲突接入设置页（`settings.section`）、侧边栏（`sidebar.footer.action`），
 并复用余额数据。开发规范见 [`docs/DEVELOPER.md`](docs/DEVELOPER.md)。
+
+首个附属插件已独立发布（与 Sidor_UI 互相独立的两个插件，可并存）：
+
+| 插件 | 包名 | 说明 |
+|---|---|---|
+| [Sidor_box](../Sidor_box) | `sidor-box` | 设置页「工具箱」分区（选页先行，功能待填入） |
