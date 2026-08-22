@@ -1,5 +1,9 @@
 # Sidor_UI · SIDOR 星野控制台皮肤
 
+![DSH 插件](https://img.shields.io/badge/DeepSeek%20Harness-插件-4f86f7?style=flat-square&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBkPSJNNyAwLjggOC42IDUuNCAxMy4yIDcgOC42IDguNiA3IDEzLjIgNS40IDguNiAwLjggNyA1LjQgNS40IFoiIGZpbGw9IiNmZmZmZmYiLz48L3N2Zz4=)
+![包名](https://img.shields.io/badge/package-sidor--ui-4f86f7?style=flat-square)
+![cordis](https://img.shields.io/badge/cordis-plugin-7c6cf0?style=flat-square)
+
 DeepSeek Harness Web GUI 的 SIDOR 星野主题皮肤（独立分发仓库）。
 开屏动画、常驻星野、侧边栏余额徽章、设置页特效与低余额警告体系。
 
