@@ -478,12 +478,19 @@ profile 补丁文件 `cordis.patch.yml` 是顶层 YAML 数组，每条补丁按�
 - **启用**：追加 `- id: X` + `disabled: false`（后者覆盖前者）
 - **卸载**：删除该插件的 `insert` 补丁块 + 删除 `node_modules/<包名>` 目录
 
+> **id 必须是行内裸 id，不能带 Loader 前缀**：官方插件列表的 `data-plugin-entry`
+> 是 Loader 完整条目 id（`Entry.id` getter 会拼接父树前缀，如 `include:sidor-ui`），
+> 但 `applyEntryPatches` 的 id 索引只认配置行内的裸 `options.id`（`sidor-ui`）。
+> 带前缀的补丁会以 `patch: entry X not found` 被**静默跳过**，关闭/启用不生效。
+> 皮肤已内置此转换（取 `:` 后末段）。
+
 ### 12.3 实现要点（`src/sidor-fx-client.js`）
 
 - 组件 `PluginManageFx` 注册进 `shell.overlay`（order 200），常驻但不渲染内容；
 - 每 600ms + MutationObserver 扫描官方插件卡片 `li[data-plugin-entry]`，注入
   `.sid-plugin-actions`（关闭/启用/卸载按钮）；`data-plugin-entry`/`cardTitle[title]`/
-  `[data-enabled]` 分别给出 entry id、模块名、启用态；
+  `[data-enabled]` 分别给出 entry id、模块名、启用态；其中 entry id 是 Loader
+  完整 id，需取 `:` 末段得到补丁用的裸 id（见 12.2）；
 - 点击按钮弹出 `.sid-plugin-dialog`（官方菜单风）二次确认，确认键 `.sid-plugin-danger`
   带**红色流光**（conic-gradient 旋转描边，复用 `sid-glow-flow`/`--sid-glow-angle`，
   色值 `--dsw-alias-state-error-primary`）；

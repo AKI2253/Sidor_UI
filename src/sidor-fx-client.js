@@ -1460,6 +1460,11 @@ return {
             if (card.querySelector('.sid-plugin-actions')) continue
             const entryId = (card.getAttribute('data-plugin-entry') || '').trim()
             if (entryId === '') continue
+            // Loader 完整条目 id 形如 `<include 树前缀>:<行内 id>`（Entry.id getter
+            // 拼接父条目 id 与 EntryTree.sep=':'），而 cordis.patch.yml 的补丁按
+            // 行内裸 id 匹配（applyEntryPatches 的 buildMap 只索引 options.id），
+            // 故补丁 id 必须取末段，否则补丁静默失配、关闭/启用不生效。
+            const patchId = entryId.slice(entryId.lastIndexOf(':') + 1)
             const titleEl = card.querySelector('[class*="cardTitle"]')
             const moduleName = titleEl instanceof HTMLElement ? String(titleEl.getAttribute('title') || '') : ''
             const tagEl = card.querySelector('[data-enabled]')
@@ -1478,7 +1483,7 @@ return {
                 e.preventDefault()
                 e.stopPropagation()
                 if (busyRef.current) return
-                setPending({ id: entryId, name: displayName, moduleName: moduleName, action: action })
+                setPending({ id: patchId, name: displayName, moduleName: moduleName, action: action })
               })
               return btn
             }
