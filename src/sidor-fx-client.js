@@ -727,7 +727,11 @@ return {
         const measure = () => {
           raf = requestAnimationFrame(measure)
           const fish = document.querySelector('[data-phase="hero"] [class*="fish"]')
-          const hlText = document.querySelector('[data-phase="hero"] [class*="headlineText"]')
+          // 标题正文元素：0.1.5 起官方把 headlineText 改名为 titleGroup（fish 一侧
+          // 同时改名为 fishHitbox，仍被 [class*="fish"] 命中）；旧名保留作回退。
+          const hlText = document.querySelector(
+            '[data-phase="hero"] [class*="titleGroup"], [data-phase="hero"] [class*="headlineText"]',
+          )
           const hl = document.querySelector('[data-phase="hero"] [class*="headline"]')
           if (hl instanceof HTMLElement) {
             let left = 0
@@ -1818,6 +1822,7 @@ return {
 /* ---- hero breathing glow: whale + headline, synced to the starfield drift ---- */
 [data-phase="hero"] svg[class*="fish"],
 [data-phase="hero"] [class*="fish"],
+[data-phase="hero"] [class*="titleGroup"],
 [data-phase="hero"] [class*="headlineText"],
 .sid-hero-brand-mark,
 .sid-hero-brand-word {
