@@ -1866,12 +1866,15 @@ return {
   }
 }
 
-/* ---- hero SIDOR brand mark (star + SIDOR丨HARNESS, width-matches the main title) ---- */
+/* ---- hero SIDOR brand mark (star + SIDOR丨HARNESS, centred as one row) ---- */
 .sid-hero-brand {
   position: fixed;
   display: flex;
   flex-direction: row;
   align-items: center;
+  /* 星标与文字是一个整体：整行居中，而不是把星标推到左端（那样它会与
+     上方官方鲸鱼对齐、与文字之间留出大片空隙）。 */
+  justify-content: center;
   gap: 10px;
   pointer-events: none;
   z-index: 1;
@@ -1897,11 +1900,11 @@ return {
   70% { transform: translate(1px, 1px) rotate(3deg); }
 }
 .sid-hero-brand-word {
-  flex: 1;
+  /* 不拉伸：文字块贴着星标（flex:1 会把两者分开）。 */
+  flex: none;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
   white-space: nowrap;
   overflow: hidden;
