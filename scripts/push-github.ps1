@@ -45,8 +45,15 @@ $gitBase = @('-C', $repo)
 if ($proxy) { $gitBase += @('-c', "http.proxy=$proxy", '-c', "https.proxy=$proxy") }
 
 Write-Host "  push   : git push $Remote $Branch"
-& git @gitBase push $Remote $Branch
-if ($LASTEXITCODE -ne 0) { throw "push failed (exit $LASTEXITCODE)" }
+# 代理偶发 TLS 抖动（unexpected eof），单次失败不代表配置错误，重试三次。
+$pushed = $false
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+  & git @gitBase push $Remote $Branch
+  if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+  Write-Host "  push   : attempt $attempt failed (exit $LASTEXITCODE), retrying…"
+  Start-Sleep -Seconds 3
+}
+if (-not $pushed) { throw 'push failed after 3 attempts' }
 
 if ($NoVerify) { Write-Host '  推送完成（未校验）。'; exit 0 }
 
