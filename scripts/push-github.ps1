@@ -41,31 +41,30 @@ function Get-SystemProxy {
 $proxy = Get-SystemProxy
 if ($proxy) { Write-Host "  proxy  : $proxy (system)" } else { Write-Host '  proxy  : (none, direct)' }
 
-$gitArgs = @('-C', $repo)
-if ($proxy) { $gitArgs += @('-c', "http.proxy=$proxy", '-c', "https.proxy=$proxy") }
-$gitArgs += @('push', $Remote, $Branch)
+$gitBase = @('-C', $repo)
+if ($proxy) { $gitBase += @('-c', "http.proxy=$proxy", '-c', "https.proxy=$proxy") }
 
 Write-Host "  push   : git push $Remote $Branch"
-& git @gitArgs
+& git @gitBase push $Remote $Branch
 if ($LASTEXITCODE -ne 0) { throw "push failed (exit $LASTEXITCODE)" }
 
-if ($NoVerify) { exit 0 }
+if ($NoVerify) { Write-Host '  推送完成（未校验）。'; exit 0 }
 
-# 远端校验：GitHub API 走系统代理（.NET 默认读取 Internet 设置）。
 $local = (& git -C $repo rev-parse HEAD).Trim()
-$url = (& git -C $repo remote get-url $Remote).Trim() -replace '^git\+', '' -replace '\.git$', ''
-if ($url -match 'github\.com[:/](?<owner>[^/]+)/(?<name>[^/]+)$') {
-  $api = "https://api.github.com/repos/$($matches['owner'])/$($matches['name'])/branches/$Branch"
-  try {
-    $remote = (Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'sidor-push' } -TimeoutSec 20).commit.sha
-    if ($remote -eq $local) {
-      Write-Host "  verify : OK  remote head = $remote"
-    } else {
-      Write-Host "  verify : MISMATCH  remote=$remote local=$local"
-      exit 1
-    }
-  } catch {
-    Write-Host "  verify : skipped ($($_.Exception.Message))"
-  }
+# 远端校验走同一条代理通道：ls-remote 比 GitHub API 稳定，且不受匿名限流影响；
+# 代理偶发 TLS 抖动，故重试三次。
+$remoteHead = $null
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+  $out = & git @gitBase ls-remote $Remote "refs/heads/$Branch" 2>$null
+  if ($LASTEXITCODE -eq 0 -and $out) { $remoteHead = ($out -split "`t")[0].Trim(); break }
+  Start-Sleep -Seconds 2
+}
+if (-not $remoteHead) {
+  Write-Host '  verify : skipped (ls-remote unavailable)'
+} elseif ($remoteHead -eq $local) {
+  Write-Host "  verify : OK  remote head = $remoteHead"
+} else {
+  Write-Host "  verify : MISMATCH  remote=$remoteHead local=$local"
+  exit 1
 }
 Write-Host '  推送完成。'
