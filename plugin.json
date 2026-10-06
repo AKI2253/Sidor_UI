@@ -19,7 +19,6 @@
     { "name": "shell.overlay", "id": "sidor-plugin-manage", "order": 200 },
     { "name": "settings.section", "id": "sidor-balance", "order": 25 },
     { "name": "sidebar.footer.action", "id": "sidor-balance", "order": -10 },
-    { "name": "conversation.input.left", "id": "sidor-filepick", "order": 10 },
     { "name": "conversation.composer.dock", "id": "sidor-cmp-resize", "order": 100 }
   ],
   "hostRpc": [

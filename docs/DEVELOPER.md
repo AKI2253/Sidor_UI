@@ -13,7 +13,7 @@ SIDOR 以 **动态 Cordis 插件**（pluginId `sidf-4`）运行，分两端：
 
 | 端 | 代码 | 职责 |
 |----|------|------|
-| Client（浏览器） | `src/sidor-fx-client.js` | 开屏动画、星野、侧边栏余额、设置页、各种 DOM 注入特效、文档路径附加（静态/动态通用） |
+| Client（浏览器） | `src/sidor-fx-client.js` | 开屏动画、星野、侧边栏余额、设置页、各种 DOM 注入特效、输入框拉伸手柄 |
 | Host（Node 进程） | `src/sidor-fx-host.js` | `harness.handle` RPC：余额读写/查询、文档上传（仅动态形态） |
 
 插件通过 **官方插槽（Slots）** 向官方 UI 注册自己的 React 组件，并通过 **DOM 注入 +
@@ -59,8 +59,7 @@ SIDOR 余额页用 `25`（在 Agent 预设之后）。
 | `shell.overlay` | root（list） | `sidor-plugin-manage` | 200 | 插件管理（见 §12）：向官方"设置→插件列表"卡片注入 关闭/启用/卸载 按钮 + 红色流光二次确认 |
 | `settings.section` | root（list） | `sidor-balance` | 25 | 设置页新增一个左侧导航分区 |
 | `sidebar.footer.action` | root（list） | `sidor-balance` | -10 | 侧边栏底部动作（余额徽章）；`props.wide` 表示宽/窄轨态 |
-| `conversation.input.left` | session（list） | `sidor-filepick` | 10 | 输入框左侧工具（文档路径附加按钮）；props 含 `inputActions`/`sessionId`/`input` |
-| `conversation.composer.dock` | session（list） | `sidor-cmp-resize` | 100 | 输入框底部的拖拽把手 |
+| `conversation.composer.dock` | session（list） | `sidor-cmp-resize` | 100 | 输入框底部的拖拽把手（唯一的输入框内 SIDOR 功能） |
 
 **要点**：
 - 同名插槽是 list 型，多个插件可共存，按 `order` 自动排序——这就是附属插件能"自然并排"的机制。
@@ -299,11 +298,10 @@ Host 端用 `harness.handle('sidor/...')` 暴露，Client 用 `host.call('sidor/
 | `sidor/balance-get` | `{}` | `{ok, visible, apiKey, balance:{usd,cny}, alerts:{usd,cny}}` | 读持久化余额配置 |
 | `sidor/balance-set` | `{visible?, apiKey?, alertUsd?, alertCny?}` | `{ok}` | 写配置（`.sidor-balance.json`） |
 | `sidor/balance-query` | `{}` | `{ok, balance:{usd,cny}}` | 用配置的 API Key 调 DeepSeek 官方余额接口（subprocess curl） |
-| `sidor/upload-doc` | `{sessionId, name, dataBase64}` | `{ok, path, binary}` | 文档上传到 `.sidor-uploads/`（文本直存，二进制 .b64）。**仅动态形态可用**（静态无 host 通道） |
+| `sidor/upload-doc` | `{sessionId, name, dataBase64}` | `{ok, path, binary}` | 文档上传到 `.sidor-uploads/`（文本直存，二进制 .b64）。**已停用**：输入框「文档」按钮已移除，客户端不再调用 |
 
-> 「文档」按钮行为：静态与动态形态都把**路径**贴入输入框，由 agent 工具读取。
-> 动态形态额外保留 `sidor/upload-doc` 落盘上传（文件入 `.sidor-uploads/` 后贴相对路径）。
-> 静态形态无法落盘，改为路径选择（见 §11.2）。
+> 输入框按钮区现由官方独占（SIDOR 不再注册 `conversation.input.left`），
+> 上述 `sidor/upload-doc` 仅作为历史遗留的 host 端兜底保留。
 
 持久化位置：**第一个 session 的 cwd** 下 `.sidor-balance.json`。
 
@@ -425,14 +423,15 @@ Sidor_UI 升级为标准 Cordis 插件包（`package.json` 的 `dsh.client` 声�
   - 余额配置 → 浏览器 **localStorage**（键 `sidor.balance.config`）；
   - 余额查询 → 浏览器 **fetch 直连** `api.deepseek.com/user/balance`
     （若浏览器 CORS 拒绝，UI 显示错误）；
-  - 文档附件 → **无法落盘**。「文档」按钮降级为**路径选择**：路径输入框 +
-    原生文件夹选择器 + 工作区路径提示，把路径贴入输入框，由 agent 工具直接读取。
-    路径选择走**同源 `/api` RPC 直连官方端点**（`host.pickDirectory` /
-    `workspace.list` / `session.list`），信封格式与官方 WebApiClient 一致
-    （`POST /api/<method>`，body `{type:'client-request', rpcId, method, payload}`）。
+  - 输入框按钮区 → **不再由 SIDOR 注入**：早期版本的「文档」路径附加按钮已移除，
+    输入框左侧/底部的按钮完全交还官方；输入框内仅保留 `conversation.composer.dock`
+    的拉伸手柄（见插槽表）。
+    插件管理（§12）仍走**同源 `/api` RPC 直连官方端点**，信封与官方
+    WebConnectionRpc 一致（`POST /api/<a>/<b>`，body
+    `{type:'client-request', rpcId, method:'<a>/<b>', payload:{args}}`；
+    `args` 字段名 = 官方形参名，如 `session/prompt` 的 `{request}`）。
     注意动态闭包会把裸 `fetch` 遮蔽成教学错误，客户端统一用 `window.fetch`。
-    静态 wrapper 在 `host` 上盖 `runtime:'static'` 戳，客户端据此区分静态/动态
-    形态（`SIDOR_STATIC`），动态形态下才显示 `sidor/upload-doc` 落盘上传。
+    静态 wrapper 仍在 `host` 上盖 `runtime:'static'` 戳（仅供辨识）。
 - **Host 半 = `lib/index.js`**：标准 ESM 空壳（依赖 sessions/fs/subprocess 为宿主服务，
   待官方提供静态 RPC 通道后迁入 `src/sidor-fx-host.js` 逻辑）。
 

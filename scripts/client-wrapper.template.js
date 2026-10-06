@@ -32,10 +32,9 @@ window.__ModuleLoader__.load({
 
 		// host：静态形态的降级实现。
 		//   sidor/balance-* → localStorage 配置 + 浏览器 fetch 直连 DeepSeek 官方余额接口
-		//   sidor/upload-doc  → 静态模式不支持文件落盘（客户端已不再调用：文档改走路径选择，
-		//                       经同源 /api RPC 直连官方 directoryPicker/pick、session/list 等）
-		// runtime:'static' 是静态形态的戳：动态 runner 注入的 host 只有 call，没有该属性，
-		// 客户端据此区分静态/动态形态（SIDOR_STATIC）。
+		//   sidor/upload-doc  → 保留的兜底分支：输入框文档按钮已移除（底部按钮区交还
+		//                       官方），客户端不再调用该方法。
+		// runtime:'static' 是静态形态的戳，仅供宿主/调试辨识。
 		var host = {
 			runtime: "static",
 			call: async function (method, args) {
