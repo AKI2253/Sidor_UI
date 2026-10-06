@@ -85,6 +85,10 @@ return {
       const sctx = scratch.getContext('2d', { willReadFrequently: true })
       const mouse = { x: 0, y: 0, active: false }
       const state = { running: false, ink: '#888888', frame: 0, sizeScale: 1.5, speedScale: 1, driftScale: 1, ambientA: 0.05, disturb: null, flow: null }
+      // 指针交互 = 位置漂移（视差）+ 半径内轻柔推开（state.disturb）。
+      // 指针停在画布中心（或未进入画布）时视差为 0，此时每颗粒子沿自己的
+      // 随机方向继续漂移（rndX/rndY/rndSpeed），背景因此不会静止。
+      const CENTER_BAND = 0.08
       // Optional soft glow: a pre-rendered radial-gradient sprite drawn under
       // each particle with 'lighter' blending (opts.glow: {size, alpha}).
       let glow = opts.glow || null
@@ -168,6 +172,8 @@ return {
       function spawn() {
         particles = []
         for (let i = 0; i < COUNT; i++) {
+          // 每颗粒子一个固定的随机方向 + 速度：指针居中时用它维持漂移。
+          const dir = Math.random() * Math.PI * 2
           particles.push({
             x: (Math.random() - 0.5) * W * 1.6,
             y: (Math.random() - 0.5) * H * 1.6,
@@ -180,6 +186,9 @@ return {
             ph: Math.random() * Math.PI * 2,
             tw: 0.6 + Math.random() * 1.6,
             vx: 0, vy: 0,
+            rndX: Math.cos(dir),
+            rndY: Math.sin(dir),
+            rndSpeed: 0.05 + Math.random() * 0.16,
           })
         }
       }
@@ -298,6 +307,8 @@ return {
           }
           return
         }
+        // 「鼠标位置干扰」：指针半径内的粒子被轻柔推开。半径已按上一版的一半
+        // 收紧（150→75 / 90→45），只影响指针附近的局部，远处粒子不受扰动。
         if (state.disturb && mouse.active) {
           const R = state.disturb.r
           const R2 = R * R
@@ -316,6 +327,11 @@ return {
         const par = mouse.active ? 0.04 : 0.014
         const mx = (mouse.x - CX) * par
         const my = (mouse.y - CY) * par
+        // 指针停在画布中心附近（或未进入画布）时视差为 0；此时改用每颗粒子
+        // 自带的随机方向漂移，避免整个背景静止。
+        const band = Math.min(W, H) * CENTER_BAND
+        const centered = !mouse.active
+          || (Math.abs(mouse.x - CX) < band && Math.abs(mouse.y - CY) < band)
         const now = performance.now() / 1000
         for (const p of particles) {
           let tx, ty, ta
@@ -344,6 +360,12 @@ return {
           p.x += (tx - p.x) * s
           p.y += (ty - p.y) * s
           p.a += (ta - p.a) * Math.min(1, s * 2.4)
+          // 居中漂移只作用于环境粒子（成形中的字形粒子必须锁定在目标点）。
+          if (centered && !model) {
+            const rv = p.rndSpeed * state.driftScale
+            p.x += p.rndX * rv
+            p.y += p.rndY * rv
+          }
         }
         if (!model && !dissipating) {
           const mx2 = W * 0.55
@@ -359,6 +381,11 @@ return {
               p.drift = { x: (Math.random() - 0.5) * 0.7, y: (Math.random() - 0.5) * 0.7 }
               p.ph = Math.random() * Math.PI * 2
               p.tw = 0.6 + Math.random() * 1.6
+              // 重生时换一个随机漂移方向，避免全场粒子长期同向。
+              const dir = Math.random() * Math.PI * 2
+              p.rndX = Math.cos(dir)
+              p.rndY = Math.sin(dir)
+              p.rndSpeed = 0.05 + Math.random() * 0.16
             }
           }
         }
@@ -478,29 +505,30 @@ return {
 
       /* starfield backdrop behind the intro typography. In egg mode it turns
          red and erupts: a DENSE torrent of particles streaming fast along a
-         fixed direction (directed flow), with only a small mouse disturb —
-         like a solar electromagnetic storm. Normal mode unchanged. */
+         fixed direction (directed flow), like a solar electromagnetic storm.
+         Density sits halfway between the pre-update parameters and the first
+         denser pass; the pointer push radius is half the earlier value. */
       React.useEffect(() => {
         const canvas = bgRef.current
         if (!canvas) return
-        const engine = createParticleEngine(canvas, { count: egg ? 5700 : 1400 })
+        const engine = createParticleEngine(canvas, { count: egg ? 7980 : 2280 })
         if (egg) {
           engine.setInk('rgba(229, 83, 75, 0.62)')
-          engine.setSize(3.0)
-          engine.setAmbientAlpha(0.9)
+          engine.setSize(3.1)
+          engine.setAmbientAlpha(0.93)
           // Particle speed ×3: convergence and stream velocity both triple.
           engine.setSpeedScale(10.8)
           engine.setDriftScale(2.2)
           // Directed fast particle current: 45° upward-right stream, ×3.
           engine.setFlow(0.707, -0.707, 21.6)
           // Minimal mouse influence — the storm barely flinches.
-          engine.setDisturb(90, 1.0)
+          engine.setDisturb(45, 1.0)
           // Red halo on every particle: the torrent reads as searing energy.
           engine.setGlow({ size: 5.5, alpha: 0.4 })
         } else {
           engine.setInkVar('--dsw-alias-label-primary')
-          engine.setSize(2.0)
-          engine.setAmbientAlpha(0.4)
+          engine.setSize(2.2)
+          engine.setAmbientAlpha(0.51)
           engine.setDriftScale(0.5)
         }
         engine.scatter()
@@ -519,12 +547,14 @@ return {
         if (!canvas) return
         // Egg mode: much denser typography particles + faster convergence,
         // giving the letterforms a violent, streaming energy.
-        const engine = createParticleEngine(canvas, { count: egg ? 15000 : 6800 })
+        // Density sits halfway between the pre-update value and the first
+        // denser pass.
+        const engine = createParticleEngine(canvas, { count: egg ? 19475 : 9500 })
         engineRef.current = engine
         if (egg) {
           engine.setSpeedScale(2.4)
           engine.setDriftScale(1.6)
-          engine.setDisturb(90, 1.0)
+          engine.setDisturb(45, 1.0)
         }
         engine.start()
         const onMove = (e) => {
@@ -646,12 +676,14 @@ return {
       React.useEffect(() => {
         const canvas = ref.current
         if (!canvas) return
-        const engine = createParticleEngine(canvas, { count: 3000 })
+        // 常驻星野：密度取「更新前参数」与「首次加密」的中间值；指针交互 =
+        // 位置漂移 + 半径内轻柔推开（半径为上版的一半）。
+        const engine = createParticleEngine(canvas, { count: 4750 })
         engine.setInkVar('--dsw-alias-label-primary')
-        engine.setSize(2.5)
-        engine.setAmbientAlpha(0.48)
+        engine.setSize(2.65)
+        engine.setAmbientAlpha(0.55)
         engine.setDriftScale(0.5)
-        engine.setDisturb(150, 2.0)
+        engine.setDisturb(75, 2.0)
         engine.scatter()
         engine.start()
         // Low-balance tint: swap only the ink color to a soft red while the
@@ -780,13 +812,31 @@ return {
         return () => { mo.disconnect(); iv() }
       }, [])
 
-      // Settings panel FX: when the official settings panel opens (the
-      // .settingsArea [class*="_panel"] container), inject a starfield canvas
-      // as its background plus a soft light flowing along its border.
-      // Detected live each tick so it works across hero ⇄ conversation and
-      // survives panel open/close (the container is unmounted on close).
+      // Settings panel FX: inject a starfield canvas as the panel background
+      // plus a soft light flowing along its border.
+      // 0.2.0 replaced the old in-sidebar settings surface: the panel is now a
+      // [role="dialog"] holding a `nav` column (188px) and a `content` column
+      // (the second-level page, 612px), and it no longer sits inside
+      // .settingsArea. The effect is therefore attached to the dialog's
+      // `content` column, which is the surface every sub-page renders into.
+      // Detected live each tick so it survives panel open/close, nav switching
+      // and the hero ⇄ conversation switch.
       React.useEffect(() => {
-        const panelSel = '[class*="settingsArea"] [class*="_panel"]'
+        const legacyPanelSel = '[class*="settingsArea"] [class*="_panel"]'
+        const navCellSel = '[role="dialog"] [class*="navCell"], [class*="settingsArea"] [class*="_nav"] [class*="navCell"]'
+        // The settings dialog is the dialog that owns the nav cells; older
+        // builds keep the panel inside .settingsArea.
+        const findFxTarget = () => {
+          const dialogs = document.querySelectorAll('[role="dialog"]')
+          for (const d of dialogs) {
+            if (!d.querySelector('[class*="navCell"]')) continue
+            const content = d.querySelector('[class*="_content"]')
+            if (content instanceof HTMLElement) return content
+            if (d instanceof HTMLElement) return d
+          }
+          const legacy = document.querySelector(legacyPanelSel)
+          return legacy instanceof HTMLElement ? legacy : null
+        }
         // The official settings nav maps known section ids to icons and falls
         // back to the gear for unknown ones. Our "余额" section is unknown, so
         // swap its gear for the wallet icon every tick (React rebuilds it).
@@ -794,7 +844,7 @@ return {
         // must insert our wallet before the svg and hide the svg — never
         // append inside it.
         const fixNavIcon = () => {
-          const cells = document.querySelectorAll('[class*="settingsArea"] [class*="_nav"] [class*="navCell"]')
+          const cells = document.querySelectorAll(navCellSel)
           for (const cell of Array.from(cells)) {
             if (!(cell instanceof HTMLElement)) continue
             const label = cell.querySelector('[class*="navLabel"]')
@@ -829,7 +879,7 @@ return {
           for (const m of muts) {
             const t = m.target
             if (t && t.nodeType === 1 && typeof t.closest === 'function') {
-              if (t.closest('[class*="settingsArea"]')) { hit = true; break }
+              if (t.closest('[class*="settingsArea"]') || t.closest('[role="dialog"]')) { hit = true; break }
             }
           }
           if (hit) fixNavIcon()
@@ -850,7 +900,7 @@ return {
           lastSize = null
         }
         const tick = () => {
-          const el = document.querySelector(panelSel)
+          const el = findFxTarget()
           if (!(el instanceof HTMLElement)) {
             if (panel !== null || engine !== null) teardown()
             return
@@ -877,13 +927,15 @@ return {
             canvas.className = 'sid-settings-star'
             canvas.setAttribute('aria-hidden', 'true')
             el.insertBefore(canvas, el.firstChild)
-            engine = createParticleEngine(canvas, { count: 900, getSize: size, rehome: false })
+            engine = createParticleEngine(canvas, { count: 1378, getSize: size, rehome: false })
             engine.setInkVar('--dsw-alias-label-primary')
-            engine.setSize(2.5)
-            engine.setAmbientAlpha(0.48)
+            // 与工作区星野保持完全一致的粒子外观：同粒径、同环境透明度、
+            // 同漂移/推斥参数，且不开 glow（glow 光晕按 5× 粒径绘制，会让
+            // 设置页的粒子明显比工作区更大更虚）。
+            engine.setSize(2.65)
+            engine.setAmbientAlpha(0.55)
             engine.setDriftScale(0.5)
-            engine.setDisturb(150, 2.0)
-            engine.setGlow({ size: 5, alpha: 0.28 })
+            engine.setDisturb(75, 2.0)
             engine.scatter()
             engine.start()
             lastSize = [Math.round(r.width), Math.round(r.height)]
@@ -1722,11 +1774,19 @@ return {
   max-height: var(--sid-cmp-h, var(--dsh-composer-text-max-height, 336px)) !important;
 }
 
-/* ---- composer height resize handle ---- */
+/* ---- composer height resize handle ----
+   独立成行：官方 composer.dock 是横向 flex 行（统计胶囊等），这里让本行
+   占满整行并排在最后，从而在官方组件条之下单独占一行并居中，与官方元素
+   互不挤压。 */
+[class*="_dock"]:has(.sid-cmp-resize) {
+  flex-wrap: wrap;
+}
 .sid-cmp-resize {
+  flex: 0 0 100%;
+  order: 99;
   display: flex; align-items: center; justify-content: center;
-  height: 16px; cursor: ns-resize; user-select: none; touch-action: none;
-  margin-top: -2px;
+  height: 14px; cursor: ns-resize; user-select: none; touch-action: none;
+  margin-top: 2px;
 }
 .sid-cmp-resize-grip {
   width: 48px; height: 4px; border-radius: 999px;
@@ -1738,6 +1798,43 @@ return {
   background: var(--dsw-alias-label-secondary, #888);
   width: 64px;
 }
+
+/* ---- 官方圆角悬浮提示框（对齐官方上下文面板 .JObwrW_panel 规范：
+       specific-menu 底 / border-inverted 描边 / shadow-lv3 / 12px 圆角 /
+       12px·20px 字号行高）---- */
+.sid-tip-host { position: relative; }
+.sid-tip {
+  position: absolute;
+  z-index: 120;
+  display: none;
+  width: max-content;   /* 按内容取宽（短文案一行、长文案受 max-width 封顶换行） */
+  max-width: 300px;
+  padding: 12px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-overlay, #16181e));
+  border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35)));
+  border-radius: 12px;
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0, 0, 0, 0.35));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px; line-height: 20px;
+  pointer-events: none;
+  white-space: normal;   /* 长文案自动换行，避免文字溢出框体 */
+  text-align: left;
+}
+.sid-tip.up {
+  left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+}
+.sid-tip.right {
+  left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+}
+.sid-tip-host:hover > .sid-tip,
+.sid-tip-host:focus-visible > .sid-tip,
+.sid-tip-host:focus-within > .sid-tip {
+  display: block;
+}
+/* 余额徽章作为提示宿主时允许气泡溢出（原 overflow:hidden 仅用于裁圆角内文字） */
+.sid-balance-badge.sid-tip-host { overflow: visible; }
 
 /* ---- plugin manager: official plugin list actions + red-flow confirm ---- */
 .sid-plugin-manage {
@@ -1911,6 +2008,16 @@ return {
     linear-gradient(#fff 0 0);
           mask-composite: exclude;
   animation: sid-glow-flow 7s linear infinite;
+}
+/* ---- settings page: flat dark surface (#151517) ----
+   星野画布由皮肤注入到设置对话框的 content 列，用它作为“这是设置页”的判据
+   （:has 不受官方哈希类名变化影响）。面板本体与其两列（nav / content）统一
+   压成同一底色，粒子与流光在该底色上才干净。 */
+[role="dialog"]:has(.sid-settings-star) {
+  background: #151517 !important;
+}
+[role="dialog"]:has(.sid-settings-star) > * {
+  background: #151517 !important;
 }
 @property --sid-glow-angle {
   syntax: '<angle>';

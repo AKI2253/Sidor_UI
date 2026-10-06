@@ -1,6 +1,6 @@
 {
   "name": "sidor-ui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SIDOR — DeepSeek Harness 控制台皮肤：开屏动画 / 星野 / 余额徽章 / 设置页特效 / 低余额警告体系（Sidor 附属插件平台）",
   "repository": {
     "type": "git",
