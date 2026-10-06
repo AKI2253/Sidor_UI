@@ -39,10 +39,15 @@ function Get-SystemProxy {
 }
 
 $proxy = Get-SystemProxy
-if ($proxy) { Write-Host "  proxy  : $proxy (system)" } else { Write-Host '  proxy  : (none, direct)' }
-
-$gitBase = @('-C', $repo)
-if ($proxy) { $gitBase += @('-c', "http.proxy=$proxy", '-c', "https.proxy=$proxy") }
+if ($proxy) {
+  Write-Host "  proxy  : $proxy (system)"
+  $gitBase = @('-C', $repo, '-c', "http.proxy=$proxy", '-c', "https.proxy=$proxy")
+} else {
+  # 系统未启用代理时必须显式清空：全局 git 配置里可能残留上一次的代理端口，
+  # 否则 git 会继续走这个已经失效的端口并连不上。
+  Write-Host '  proxy  : (none; git global proxy overridden to direct)'
+  $gitBase = @('-C', $repo, '-c', 'http.proxy=', '-c', 'https.proxy=')
+}
 
 Write-Host "  push   : git push $Remote $Branch"
 # 代理偶发 TLS 抖动（unexpected eof），单次失败不代表配置错误，重试三次。
